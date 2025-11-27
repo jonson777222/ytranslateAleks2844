@@ -125,9 +125,11 @@ function translate_video() {
 		log "Languages match (${FROMLANG}). Translation step will be SKIPPED."
 	fi
 
-	local video_format="bestvideo[vcodec^=avc]/bestvideo"
-	local audio_format="bestaudio"
-	[[ "${HEIGHT:-0}" != "0" ]] && video_format="bestvideo[vcodec^=avc][height<=${HEIGHT}]/bestvideo[height<=${HEIGHT}]"
+	local audio_format="bestaudio/best"
+	local video_format="bestvideo[vcodec^=avc]/best[vcodec^=avc]/bestvideo/best"
+    if [[ "${HEIGHT:-0}" != "0" ]] && [[ "${HEIGHT:-0}" != "None" ]]; then
+		video_format="bestvideo[vcodec^=avc][height<=${HEIGHT}]/best[vcodec^=avc][height<=${HEIGHT}]/bestvideo[height<=${HEIGHT}]/best[height<=${HEIGHT}]"
+	fi
 
 	local filename
 	if [[ -n "${local_file}" ]] && [[ -f "${local_file}" ]]; then
@@ -169,14 +171,19 @@ function translate_video() {
 		audio_input="${local_file}"
 	else
 		log "Downloading streams..."
-		if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${video_format}" -o "${cache}/video.%(ext)s" "${url}"; then
-			error "Video download failed."
-		fi
 		if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${audio_format}" -o "${cache}/audio.%(ext)s" "${url}"; then
 			error "Audio download failed."
 		fi
-		video_input=$(find "${cache}" -name "video.*" -type f | head -n 1)
 		audio_input=$(find "${cache}" -name "audio.*" -type f | head -n 1)
+
+		if ffprobe -v error -select_streams v:0 -show_entries stream=codec_type "${audio_input}" 2>/dev/null | grep -q "video"; then
+			video_input="${audio_input}"
+		else
+			if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${video_format}" -o "${cache}/video.%(ext)s" "${url}"; then
+				error "Video download failed."
+			fi
+			video_input=$(find "${cache}" -name "video.*" -type f | head -n 1)
+		fi
 	fi
 
 	local mixed_audio="${cache}/mixed_final.mp3"
@@ -268,7 +275,7 @@ function main() {
 	YTDLP_OPTS+=(--no-warnings)
 	"${FORCE_IPV4}" && YTDLP_OPTS+=(--force-ipv4)
 	[[ -n "${COOKIES}" ]] && YTDLP_OPTS+=(--cookies "${COOKIES}")
-	
+
 	check_dependencies
 	mkdir -p "${OUTPUT_DIR}" "${TEMP_DIR}"
 
