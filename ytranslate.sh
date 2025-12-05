@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly VERSION='2.0.0'
-: "${COOKIES:=}"
-: "${URL:=}"
-: "${LOCAL_PATH=}"
-: "${FROMLANG="en"}"
-: "${TOLANG="ru"}"
-: "${HEIGHT=0}"
-: "${ORIG_VOLUME=0.15}"
-: "${TEMP_DIR=".ytranslate"}"
-: "${OUTPUT_EXT="mkv"}"
-: "${OUTPUT_DIR="."}"
-: "${NO_CLEANUP=false}"
-: "${FORCE_IPV4=false}"
+readonly VERSION='2.1.0'
+: "${YT_COOKIES:=}"
+: "${YT_URL:=}"
+: "${YT_LOCAL_PATH:=}"
+: "${YT_FROMLANG:="en"}"
+: "${YT_TOLANG:="ru"}"
+: "${YT_HEIGHT:=0}"
+: "${YT_ORIG_VOLUME:=0.15}"
+: "${YT_TEMP_DIR:=".ytranslate"}"
+: "${YT_OUTPUT_EXT:="mkv"}"
+: "${YT_OUTPUT_DIR:="."}"
+: "${YT_NO_CLEANUP:=false}"
+: "${YT_FORCE_IPV4:=false}"
+: "${YT_FORCE_AVC:=false}"
+: "${YT_MARK_WATCHED:=false}"
+: "${YT_ADD_INDEX:=false}"
 
 CURRENT_CACHE=""
 YTDLP_OPTS=()
@@ -34,6 +37,9 @@ function usage() {
 	echo "  -t, --to_lang=<str>    Target language (default: ru)"
 	echo "  -c, --cookies=<path>   Cookies path"
 	echo "  -o, --output=<path>    Output directory"
+	echo "  --force-avc            Force AVC (h264) video codec"
+	echo "  --mark-watched         Mark video as watched (requires cookies)"
+	echo "  --add-index            Add playlist index to filenames"
 	echo "  --temp-dir=<path>      Temporary directory"
 	echo "  --no-cleanup           Keep temp files"
 	echo ""
@@ -48,11 +54,11 @@ function usage() {
 
 function cleanup() {
 	local exit_code=$?
-	if ! "${NO_CLEANUP}" && [[ -n "${CURRENT_CACHE}" ]] && [[ -d "${CURRENT_CACHE}" ]]; then
+	if ! "${YT_NO_CLEANUP}" && [[ -n "${CURRENT_CACHE}" ]] && [[ -d "${CURRENT_CACHE}" ]]; then
 		rm -rf "${CURRENT_CACHE}"
 	fi
-	if [[ -d "${TEMP_DIR}" ]] && [[ -z "$(ls -A "${TEMP_DIR}")" ]]; then
-		rm -rf "${TEMP_DIR}"
+	if [[ -d "${YT_TEMP_DIR}" ]] && [[ -z "$(ls -A "${YT_TEMP_DIR}")" ]]; then
+		rm -rf "${YT_TEMP_DIR}"
 	fi
 	exit "${exit_code}"
 }
@@ -118,18 +124,23 @@ function get_clean_filename() {
 function translate_video() {
 	local url="$1"
 	local local_file="${2:-}"
+	local playlist_index="${3:-}"
+	local from_lang="${YT_FROMLANG}"
+	local to_lang="${YT_TOLANG}"
 	
 	local need_translation=true
-	if [[ "${FROMLANG}" == "${TOLANG}" ]]; then
+	if [[ "${from_lang}" == "${to_lang}" ]]; then
 		need_translation=false
-		log "Languages match (${FROMLANG}). Translation step will be SKIPPED."
+		log "Languages match (${from_lang}). Translation step will be SKIPPED."
 	fi
 
-	local audio_format="bestaudio/best"
-	local video_format="bestvideo[vcodec^=avc]/best[vcodec^=avc]/bestvideo/best"
-    if [[ "${HEIGHT:-0}" != "0" ]] && [[ "${HEIGHT:-0}" != "None" ]]; then
-		video_format="bestvideo[vcodec^=avc][height<=${HEIGHT}]/best[vcodec^=avc][height<=${HEIGHT}]/bestvideo[height<=${HEIGHT}]/best[height<=${HEIGHT}]"
+	local height=""
+	if [[ "${YT_HEIGHT}" =~ ^[0-9]+$ ]] && [[ "${YT_HEIGHT}" -gt 0 ]]; then
+		height="[height<=${YT_HEIGHT}]"
 	fi
+	local audio_format="bestaudio/best"
+	local video_format="bestvideo${height}/best${height}"
+	"${YT_FORCE_AVC}" && video_format="bestvideo[vcodec^=avc]${height}/best[vcodec^=avc]${height}/${video_format}"
 
 	local filename
 	if [[ -n "${local_file}" ]] && [[ -f "${local_file}" ]]; then
@@ -141,7 +152,10 @@ function translate_video() {
 		fi
 	fi
 	local title=$(basename "${filename}" | sed -E "s/(\.[a-zA-Z0-9]+)+$//")
-	local final_file="${OUTPUT_DIR}/${title}.${OUTPUT_EXT}"
+	if "${YT_ADD_INDEX}" && [[ -n "${playlist_index}" ]]; then
+		title=$(printf "%02d - %s" "${playlist_index}" "${title}")
+	fi
+	local final_file="${YT_OUTPUT_DIR}/${title}.${YT_OUTPUT_EXT}"
 	
 	if [[ -f "${final_file}" ]]; then
 		log "File exists: ${final_file}. Skipping."
@@ -150,14 +164,14 @@ function translate_video() {
 
 	log "Processing: ${title}"
 
-	local cache="${TEMP_DIR}/${title}"
+	local cache="${YT_TEMP_DIR}/${title}"
 	CURRENT_CACHE="${cache}"
 	mkdir -p "${cache}"
 
 	if "${need_translation}" && [[ ! -f "${cache}/audio_translated.mp3" ]]; then
 		log "Downloading translation..."
 		local translate_ok=true
-		vot-cli --lang="${FROMLANG}" --reslang="${TOLANG}" --output="${cache}" --output-file="audio_translated.mp3" "${url}" >/dev/null || translate_ok=false
+		vot-cli --lang="${from_lang}" --reslang="${to_lang}" --output="${cache}" --output-file="audio_translated.mp3" "${url}" >/dev/null || translate_ok=false
 		if ! "${translate_ok}" || [[ ! -f "${cache}/audio_translated.mp3" ]]; then
 			error "VOT-CLI failed to get translation."
 		fi
@@ -171,18 +185,18 @@ function translate_video() {
 		audio_input="${local_file}"
 	else
 		log "Downloading streams..."
-		if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${audio_format}" -o "${cache}/audio.%(ext)s" "${url}"; then
-			error "Audio download failed."
+		if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${video_format}" -o "${cache}/video.%(ext)s" "${url}"; then
+			error "Video download failed."
 		fi
-		audio_input=$(find "${cache}" -name "audio.*" -type f | head -n 1)
+		video_input=$(find "${cache}" -name "video.*" -type f | head -n 1)
 
-		if ffprobe -v error -select_streams v:0 -show_entries stream=codec_type "${audio_input}" 2>/dev/null | grep -q "video"; then
-			video_input="${audio_input}"
+		if ffprobe -v error -select_streams a -show_entries stream=codec_type "${video_input}" 2>/dev/null | grep -q "audio"; then
+			audio_input="${video_input}"
 		else
-			if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${video_format}" -o "${cache}/video.%(ext)s" "${url}"; then
-				error "Video download failed."
+			if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${audio_format}" -o "${cache}/audio.%(ext)s" "${url}"; then
+				error "Audio download failed."
 			fi
-			video_input=$(find "${cache}" -name "video.*" -type f | head -n 1)
+			audio_input=$(find "${cache}" -name "audio.*" -type f | head -n 1)
 		fi
 	fi
 
@@ -199,7 +213,7 @@ function translate_video() {
 			-i "${audio_input}" \
 			-i "${cache}/audio_translated.mp3" \
 			-filter_complex \
-			"[0:a]volume=${ORIG_VOLUME}[orig];[1:a]volume=1.8[trans];[orig][trans]amix=inputs=2:duration=first[aout]" \
+			"[0:a]volume=${YT_ORIG_VOLUME}[orig];[1:a]volume=1.8[trans];[orig][trans]amix=inputs=2:duration=first[aout]" \
 			-map "[aout]" \
 			-c:a libmp3lame -q:a 2 \
 			-ac 2 \
@@ -218,7 +232,7 @@ function translate_video() {
 		"${final_file}" || mux_ok=false
 	if "${mux_ok}" && [[ -f "${final_file}" ]]; then
 		log "Done: ${final_file}"
-		if ! "${NO_CLEANUP}"; then
+		if ! "${YT_NO_CLEANUP}"; then
 			rm -rf "${cache}"
 		fi
 		CURRENT_CACHE=""
@@ -230,7 +244,7 @@ function translate_video() {
 function main() {
 	if [[ $# -gt 0 ]]; then
 		local OPTIONS="hv4r:f:t:c:o:"
-		local LONGOPTS="help,version,ipv4,height:,from_lang:,to_lang:,cookies:,output:,temp-dir:,no-cleanup"
+		local LONGOPTS="help,version,ipv4,height:,from_lang:,to_lang:,cookies:,output:,temp-dir:,force-avc,mark-watched,add-index,no-cleanup"
 		eval set -- $(getopt --options="${OPTIONS}" --longoptions="${LONGOPTS}" --name "$0" -- "$@")
 		while getopts "${OPTIONS}-:" OPT; do
 			if [[ "${OPT}" = "-" ]]; then
@@ -250,21 +264,24 @@ function main() {
 					echo "${VERSION}";
 					exit 0
 				;;
-				4|ipv4) FORCE_IPV4=true;;
-				r|height) HEIGHT="${OPTARG}";;
-				f|from_lang) FROMLANG="${OPTARG}";;
-				t|to_lang) TOLANG="${OPTARG}";;
-				c|cookies) COOKIES="${OPTARG}";;
-				o|output) OUTPUT_DIR="${OPTARG}";;
-				temp-dir) TEMP_DIR="${OPTARG}";;
-				no-cleanup) NO_CLEANUP=true;;
+				4|ipv4) YT_FORCE_IPV4=true;;
+				r|height) YT_HEIGHT="${OPTARG}";;
+				f|from_lang) YT_FROMLANG="${OPTARG}";;
+				t|to_lang) YT_TOLANG="${OPTARG}";;
+				c|cookies) YT_COOKIES="${OPTARG}";;
+				o|output) YT_OUTPUT_DIR="${OPTARG}";;
+				temp-dir) YT_TEMP_DIR="${OPTARG}";;
+				force-avc) YT_FORCE_AVC=true;;
+				mark-watched) YT_MARK_WATCHED=true;;
+				add-index) YT_ADD_INDEX=true;;
+				no-cleanup) YT_NO_CLEANUP=true;;
 			esac
 		done
 		shift $((OPTIND - 1))
-		[[ -n "${1:-}" ]] && URL="$1"
-		[[ -n "${2:-}" ]] && LOCAL_PATH="$2"
+		[[ -n "${1:-}" ]] && YT_URL="$1"
+		[[ -n "${2:-}" ]] && YT_LOCAL_PATH="$2"
 	fi
-	if [[ -z "${URL}" ]]; then
+	if [[ -z "${YT_URL}" ]]; then
 		if [[ -n "${COLAB_RELEASE_TAG:-}" ]]; then
 			error "URL or File not specified."
 		else
@@ -273,43 +290,44 @@ function main() {
 	fi
 
 	YTDLP_OPTS+=(--no-warnings)
-	"${FORCE_IPV4}" && YTDLP_OPTS+=(--force-ipv4)
-	[[ -n "${COOKIES}" ]] && YTDLP_OPTS+=(--cookies "${COOKIES}")
+	"${YT_FORCE_IPV4}" && YTDLP_OPTS+=(--force-ipv4)
+	"${YT_MARK_WATCHED}" && YTDLP_OPTS+=(--mark-watched)
+	[[ -n "${YT_COOKIES}" ]] && YTDLP_OPTS+=(--cookies "${YT_COOKIES}")
 
 	check_dependencies
-	mkdir -p "${OUTPUT_DIR}" "${TEMP_DIR}"
+	mkdir -p "${YT_OUTPUT_DIR}" "${YT_TEMP_DIR}"
 
-	if [[ -n "${COLAB_RELEASE_TAG:-}" ]] && [[ "${URL}" != *"://"* ]] && [[ "${URL}" == *"/MyDrive/"* ]]; then
-		LOCAL_PATH="${URL}"
-		[[ ! -f "${LOCAL_PATH}" ]] && error "File not found: ${LOCAL_PATH}"
+	if [[ -n "${COLAB_RELEASE_TAG:-}" ]] && [[ "${YT_URL}" != *"://"* ]] && [[ "${YT_URL}" == *"/MyDrive/"* ]]; then
+		YT_LOCAL_PATH="${YT_URL}"
+		[[ ! -f "${YT_LOCAL_PATH}" ]] && error "File not found: ${YT_LOCAL_PATH}"
 		install_dependency "xattr"
-		local fileid=$(xattr -p 'user.drive.id' "${LOCAL_PATH}" 2>/dev/null)
-		[[ -z "${fileid:-}" ]] && error "File not found: ${LOCAL_PATH}"
-		URL="https://drive.google.com/file/d/${fileid}/view"
+		local fileid=$(xattr -p 'user.drive.id' "${YT_LOCAL_PATH}" 2>/dev/null)
+		[[ -z "${fileid:-}" ]] && error "File not found: ${YT_LOCAL_PATH}"
+		YT_URL="https://drive.google.com/file/d/${fileid}/view"
 	fi
 
-	if [[ -n "${LOCAL_PATH}" ]]; then
-		[[ ! -f "${LOCAL_PATH}" ]] && error "Local file not found: ${LOCAL_PATH}"
+	if [[ -n "${YT_LOCAL_PATH}" ]]; then
+		[[ ! -f "${YT_LOCAL_PATH}" ]] && error "Local file not found: ${YT_LOCAL_PATH}"
 		log "Single file mode (Local Source)"
-		translate_video "${URL}" "${LOCAL_PATH}"
+		translate_video "${YT_URL}" "${YT_LOCAL_PATH}" "1"
 	else
 		log "Fetching video list..."
 		local urls=()
-		if [[ "${URL}" == *"youtube.com"* ]] || [[ "${URL}" == *"youtu.be"* ]]; then
+		if [[ "${YT_URL}" == *"youtube.com"* ]] || [[ "${YT_URL}" == *"youtu.be"* ]]; then
 			while IFS= read -r video_id; do
 				if [[ -n "${video_id}" ]] && [[ "${video_id}" != "NA" ]]; then
 					urls+=("https://youtu.be/${video_id}")
 				fi
-			done < <(yt-dlp "${YTDLP_OPTS[@]}" --flat-playlist --print id --ignore-errors "${URL}")
+			done < <(yt-dlp "${YTDLP_OPTS[@]}" --flat-playlist --print id --ignore-errors "${YT_URL}")
 		else
-			urls+=("${URL}")
+			urls+=("${YT_URL}")
 		fi
 		local count=1
 		local total=${#urls[@]}
 		[[ ${total} -eq 0 ]] && error "No videos found."
 		for video_url in "${urls[@]}"; do
 			log "=== [${count}/${total}] Processing ==="
-			translate_video "${video_url}" ""
+			translate_video "${video_url}" "" "${count}"
 			((count++))
 		done
 	fi
@@ -317,5 +335,6 @@ function main() {
 }
 
 if [[ "${BASH_SOURCE:-${0}}" == "${0}" ]]; then
+	[[ -f ".env" ]] && source ".env"
 	main "$@"
 fi
