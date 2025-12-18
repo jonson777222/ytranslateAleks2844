@@ -1,3 +1,4 @@
 .ytranslate/
+.env
 *.mkv
 *cookies.txt
