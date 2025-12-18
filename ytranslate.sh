@@ -17,6 +17,7 @@ readonly VERSION='2.1.0'
 : "${YT_FORCE_AVC:=false}"
 : "${YT_MARK_WATCHED:=false}"
 : "${YT_ADD_INDEX:=false}"
+: "${YT_GENERATE_META:=false}"
 : "${YT_SPONSORBLOCK:=true}"
 
 CURRENT_CACHE=""
@@ -41,6 +42,7 @@ function usage() {
 	echo "  --force-avc            Force AVC (h264) video codec"
 	echo "  --mark-watched         Mark video as watched (requires cookies)"
 	echo "  --add-index            Add playlist index to filenames"
+	echo "  --meta                 Generate NFO and JPG for Media Centers"
 	echo "  --no-sponsorblock      Disable marking sponsor segments (enabled by default)"
 	echo "  --temp-dir=<path>      Temporary directory"
 	echo "  --no-cleanup           Keep temp files"
@@ -121,6 +123,14 @@ function check_dependencies() {
 function get_clean_filename() {
 	local url="$1"
 	yt-dlp "${YTDLP_OPTS[@]}" --restrict-filenames --print filename -o "%(title)s.%(ext)s" "${url}"
+}
+
+function xml_escape() {
+	local s="$1"
+	s="${s//&/&amp;}"
+	s="${s//</&lt;}"
+	s="${s//>/&gt;}"
+	echo "${s//\"/&quot;}"
 }
 
 function translate_video() {
@@ -206,6 +216,41 @@ function translate_video() {
 				audio_input=$(find "${cache}" -name "audio.*" -type f | head -n 1)
 			fi
 		fi
+		if "${YT_GENERATE_META}"; then
+			if [[ ! -f "${cache}/meta.jpg" ]] || [[ ! -f "${cache}/meta.nfo" ]]; then
+				log "Fetching metadata (NFO/JPG)..."
+				local meta_data=$(yt-dlp "${YTDLP_OPTS[@]}" \
+					--no-simulate --skip-download --write-thumbnail --convert-thumbnails jpg --output "${cache}/meta" \
+					--print upload_date --print duration --print uploader --print title --print description \
+					"${url}")
+				if [[ -n "${meta_data}" ]]; then
+					mapfile -t d <<< "${meta_data}"
+					local date="${d[0]}"
+					local duration="${d[1]}"
+					local uploader=$(xml_escape "${d[2]}")
+					local title=$(xml_escape "${d[3]}")
+					local desc=$(xml_escape "$(printf "%s\n" "${d[@]:4}")")
+					local kodi_date=""
+					[[ "${date}" =~ ^[0-9]{8}$ ]] && kodi_date="${date:0:4}-${date:4:2}-${date:6:2}"
+					sed 's/^> //' <<-EOF | tee "${cache}/meta.nfo" > /dev/null
+						> <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+						> <musicvideo>
+						>     <album>YouTube</album>
+						>     <title>${title%.}</title>
+						>     <artist>${uploader}</artist>
+						>     <plot>${desc}</plot>
+						>     <year>${date:0:4}</year>
+						>     <premiered>${kodi_date}</premiered>
+						>     <fileinfo>
+						>         <streamdetails>
+						>             <video>
+						>                 <durationinseconds>${duration:-0}</durationinseconds>
+						>             </video>
+						>         </streamdetails>
+						>     </fileinfo>
+						> </musicvideo>
+					EOF
+				fi
 			fi
 		fi
 	fi
@@ -244,6 +289,10 @@ function translate_video() {
 		"${final_file}" || mux_ok=false
 	if "${mux_ok}" && [[ -f "${final_file}" ]]; then
 		log "Done: ${final_file}"
+		if "${YT_GENERATE_META}"; then
+			[[ -f "${cache}/meta.nfo" ]] && cp "${cache}/meta.nfo" "${final_file}.nfo"
+			[[ -f "${cache}/meta.jpg" ]] && cp "${cache}/meta.jpg" "${final_file}-thumb.jpg"
+		fi
 		if ! "${YT_NO_CLEANUP}"; then
 			rm -rf "${cache}"
 		fi
@@ -286,6 +335,7 @@ function main() {
 				force-avc) YT_FORCE_AVC=true;;
 				mark-watched) YT_MARK_WATCHED=true;;
 				add-index) YT_ADD_INDEX=true;;
+				meta) YT_GENERATE_META=true;;
 				no-cleanup) YT_NO_CLEANUP=true;;
 				no-sponsorblock) YT_SPONSORBLOCK=false;;
 			esac
