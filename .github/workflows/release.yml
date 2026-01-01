@@ -3,7 +3,7 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*'
 
 jobs:
   release:
@@ -13,26 +13,38 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Get Version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
       - name: Patch files with version
         run: |
           sed -i "s|/main/|/${GITHUB_REF_NAME}/|g" ytranslate.ipynb
           sed -i "s|readonly VERSION='.*'|readonly VERSION='${{ env.VERSION }}'|g" ytranslate.sh
+
       - name: Create Release Commit
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -am "chore: Release ${{ env.VERSION }}"
+
       - name: Update Tag
         run: |
           git tag -f ${{ github.ref_name }}
           git push origin ${{ github.ref_name }} -f
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+
+      - name: Generate Changelog
+        uses: alex2844/action-gh-changelog@v1
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ env.VERSION }}
+          output: 'RELEASE_NOTES.md'
+          lang: 'ru'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: ./RELEASE_NOTES.md
           files: ytranslate.sh
           draft: false
           prerelease: false
