@@ -1,33 +1,35 @@
 # YouTube Translate
 
-> **Translate videos effortlessly.**
+> Translate and download videos effortlessly, bypassing throttling.
 
 This script allows you to easily translate videos from YouTube and other online
 platforms. It uses [`vot-cli`](https://github.com/FOSWLY/vot-cli) for
 translation and other command-line utilities like [`ffmpeg`](https://ffmpeg.org/)
 and [`yt-dlp`](https://github.com/yt-dlp/yt-dlp).
 
-The script is designed to be fast and flexible, working on both local machines
-and in Google Colab. It creates universally compatible files (MKV + MP3/AVC)
-that work smoothly on Chromecast, Android TV, and Chrome OS.
+The script is designed to be fast and flexible. Running it in **Google Colab**
+allows you to download videos at high speed, bypassing ISP throttling.
+
+It creates universally compatible files (MKV + MP3/AVC) that work smoothly
+on Chromecast, Android TV, and Chrome OS.
 
 ## Features
 
-* **Automatic translation** of videos from YouTube and other sources.
+* **Bypass Throttling**: Use the Google Colab version to download videos
+  from YouTube via Google's servers, avoiding ISP speed limits.
+* **Simple Downloader**: Just set the source and target languages to be the
+  same (e.g., `en` to `en`) to use the script as a powerful video downloader.
+* **Automatic Translation**: Translate videos from YouTube and other sources.
 * **SponsorBlock Integration**: Marks sponsor segments as chapters for automatic
   skipping in players like Kodi and VLC (enabled by default).
 * **Media Center Integration**: Automatically generates `.nfo` metadata and
   thumbnail files, perfect for Kodi, Jellyfin, and Emby.
-* **High performance**: Optimized specifically for speed using MKV container
-  and MP3 audio (no heavy transcoding).
-* **Playlist support**: Can process entire YouTube playlists automatically.
-* **Smart Organization**: Optional numbering for playlist files
-  (`01 - Video...`).
-* **YouTube Sync**: Can mark videos as "watched" on YouTube (requires cookies).
+* **High performance**: Optimized for speed using the MKV container and MP3 audio,
+  avoiding heavy transcoding.
+* **Playlist support**: Process entire YouTube playlists automatically.
+* **YouTube Sync**: Mark videos as "watched" on YouTube (requires cookies).
 * **Local file support**: Use an existing video file to save bandwidth, while
   fetching the translation using the URL.
-* **Broad compatibility**: Resulting files work well on Chromecast, Pixelbook,
-  and Kodi. Includes an option to force H.264 (AVC) for older devices.
 * **Configuration**: Support for `.env` files, settings saving (Colab), and
   flexible flags.
 
@@ -50,51 +52,45 @@ that work smoothly on Chromecast, Android TV, and Chrome OS.
 
     * `-h, --help`: Show help message.
     * `-v, --version`: Show script version.
-    * `-r, --height=<int>`: Set max video height (e.g., 1080). Default: Best.
-    * `-f, --from_lang=<str>`: Set source language (default: en).
-    * `-t, --to_lang=<str>`: Set target language (default: ru).
-    * `-o, --output=<path>`: Set output directory.
+    * `-r, --height=<int>`: Set max video height (e.g., 1080).
+    * `-f, --from_lang=<str>`: Source language (default: en).
+    * `-t, --to_lang=<str>`: Target language (default: ru).
+    * `-o, --output=<path>`: Output directory.
     * `-c, --cookies=<path>`: Path to cookies file (for private playlists or
       marking watched).
     * `-4, --ipv4`: Force IPv4 connection.
-    * `--force-avc`: Force AVC (H.264) video codec. Useful for older TVs.
+    * `--force-avc`: Force AVC (H.264) video codec for older devices.
     * `--mark-watched`: Mark video as watched on YouTube (requires cookies).
-    * `--add-index`: Add playlist index to filenames (e.g., "01 - Title.mkv").
     * `--meta`: Generate NFO and JPG for Media Centers.
     * `--no-sponsorblock`: Disable marking sponsor segments (enabled by default).
     * `--no-cleanup`: Keep temporary files.
 
     **Examples:**
 
-    Translate a single YouTube video:
+    Translate a single video with metadata:
 
     ```bash
-    ./ytranslate.sh -f en -t ru -r 1080 https://youtu.be/VIDEO_ID
+    ./ytranslate.sh -f en -t ru --meta https://youtu.be/VIDEO_ID
     ```
 
-    Translate a playlist, creating metadata, numbering files, and marking as
-    watched:
+    Download a playlist in its original language, creating metadata and marking
+    as watched:
 
     ```bash
-    ./ytranslate.sh -c cookies.txt --add-index --meta --mark-watched \
+    ./ytranslate.sh -f en -t en -c cookies.txt --meta --mark-watched \
       https://www.youtube.com/playlist?list=WL
     ```
 
-    Use a local video file (avoids redownloading) + URL for translation source:
+### Google Colab (Bypass Throttling)
 
-    ```bash
-    ./ytranslate.sh https://youtu.be/VIDEO_ID /path/to/downloaded_video.mp4
-    ```
-
-### Google Colab
-
-1. Open the [`ytranslate.ipynb`](https://colab.research.google.com/github/alex2844/youtube-translate/blob/main/ytranslate.ipynb)
+1. Open the
+   [`ytranslate.ipynb`](https://colab.research.google.com/github/alex2844/youtube-translate/blob/main/ytranslate.ipynb)
    file in Google Colab.
-2. Fill in the parameters in the "Settings" block. You can enable options
-   like `FORCE_AVC`, `MARK_WATCHED`, and `ADD_INDEX` via checkboxes.
-3. Run all cells.
-4. The script will process the video(s) and save them to your Google Drive
-   or prompt for download.
+2. Fill in the parameters in the "Settings" block.
+3. **To simply download**, set `FROMLANG` and `TOLANG` to the same language.
+4. Run all cells.
+5. The script will process the video(s) and automatically save them to your
+   Google Drive or prompt for download.
 
 ## Installing Dependencies
 
@@ -109,35 +105,38 @@ INSTALL_DEPENDENCIES=true ./ytranslate.sh [OPTIONS] <URL>
 
 ---
 
-### Переводите видео без усилий
+### Переводите и скачивайте видео без усилий и ограничений
 
 Этот скрипт позволяет легко переводить видео с YouTube и других онлайн-платформ.
 Он использует [`vot-cli`](https://github.com/FOSWLY/vot-cli) для перевода, а
 также утилиты командной строки [`ffmpeg`](https://ffmpeg.org/) и
 [`yt-dlp`](https://github.com/yt-dlp/yt-dlp).
 
-Скрипт оптимизирован для высокой скорости и создает файлы (MKV + MP3/AVC),
-которые корректно воспроизводятся на большинстве устройств, включая Chromecast,
-Android TV и Chrome OS.
+Главное преимущество — запуск в **Google Colab**, что позволяет
+**скачивать видео на высокой скорости в обход замедления YouTube** со стороны
+провайдеров.
+
+Скрипт создает универсальные файлы (MKV + MP3/AVC), которые корректно
+воспроизводятся на большинстве устройств, включая Chromecast, Android TV и Kodi.
 
 ## Возможности
 
+* **Обход замедления YouTube**: Используйте версию для Google Colab, чтобы
+  скачивать видео через серверы Google на максимальной скорости, игнорируя
+  ограничения вашего провайдера.
+* **Простой загрузчик видео**: Просто укажите одинаковые языки
+  (например, с `ru` на `ru`), чтобы использовать скрипт как мощный инструмент
+  для скачивания видео или плейлистов.
 * **Автоматический перевод** видео с YouTube и других источников.
-* **Интеграция со SponsorBlock**: Создает в MKV-файле главы для
-  автоматического пропуска спонсорских сегментов (включено по умолчанию).
+* **Интеграция со SponsorBlock**: Создает в MKV-файле главы для автоматического
+  пропуска спонсорских сегментов (включено по умолчанию).
 * **Интеграция с медиацентрами**: Автоматическое создание метаданных (`.nfo`)
   и обложек, идеально для Kodi, Jellyfin и Emby.
 * **Высокая скорость**: Использование контейнера MKV и аудио MP3 позволяет
   избежать долгого перекодирования.
 * **Поддержка плейлистов**: Возможность обработки целых плейлистов YouTube.
-* **Умная организация**: Опциональная нумерация файлов плейлиста
-  (`01 - Видео...`).
 * **Синхронизация с YouTube**: Возможность помечать видео как "просмотренные"
   (нужны cookies).
-* **Поддержка локальных файлов**: Использование уже скачанного файла для
-  экономии трафика, пока перевод загружается по ссылке.
-* **Совместимость**: Файлы оптимизированы для Chromecast и Kodi. Опция
-  принудительного кодека H.264 (AVC) для старых устройств.
 * **Гибкая настройка**: Поддержка `.env` файлов, сохранение настроек (Colab)
   и множество флагов запуска.
 
@@ -148,8 +147,8 @@ Android TV и Chrome OS.
 1. Установите необходимые зависимости (ffmpeg, yt-dlp, vot-cli, npm/pip).
 2. Сделайте [`ytranslate.sh`](https://raw.githubusercontent.com/alex2844/youtube-translate/main/ytranslate.sh)
    исполняемым: `chmod +x ytranslate.sh`.
-3. (Опционально) Создайте файл `.env` для сохранения настроек (например,
-   `YT_TOLANG=ru`).
+3. (Опционально) Создайте файл `.env` для сохранения настроек
+   (например, `YT_TOLANG=ru`).
 4. Запустите скрипт:
 
     ```bash
@@ -167,43 +166,40 @@ Android TV и Chrome OS.
     * `-c, --cookies=<path>`: Путь к cookies (для приватных плейлистов или
       пометки "Просмотрено").
     * `-4, --ipv4`: Принудительно использовать IPv4.
-    * `--force-avc`: Принудительно использовать кодек AVC (H.264).
+    * `--force-avc`: Принудительно использовать кодек AVC (H.264) для
+      старых устройств.
     * `--mark-watched`: Помечать видео как просмотренное на YouTube.
-    * `--add-index`: Добавлять порядковый номер плейлиста в имя файла.
     * `--meta`: Создавать метаданные (.nfo и .jpg) для медиацентров.
-    * `--no-sponsorblock`: Отключить разметку спонсорских сегментов (включено
-      по умолчанию).
+    * `--no-sponsorblock`: Отключить разметку спонсорских сегментов
+      (включено по умолчанию).
     * `--no-cleanup`: Не удалять временные файлы.
 
     **Примеры:**
 
-    Перевод одного видео:
+    Перевод одного видео с созданием метаданных:
 
     ```bash
-    ./ytranslate.sh -f en -t ru -r 1080 https://youtu.be/VIDEO_ID
+    ./ytranslate.sh -f en -t ru --meta https://youtu.be/VIDEO_ID
     ```
 
-    Перевод плейлиста с метаданными, нумерацией и пометкой "просмотрено":
+    Скачивание плейлиста на оригинальном языке с метаданными и пометкой
+    "просмотрено":
 
     ```bash
-    ./ytranslate.sh -c cookies.txt --add-index --meta --mark-watched \
+    ./ytranslate.sh -f ru -t ru -c cookies.txt --meta --mark-watched \
       https://www.youtube.com/playlist?list=WL
     ```
 
-    Использование локального файла (чтобы не качать) + URL для перевода:
+### Запуск в Google Colab (Обход замедления)
 
-    ```bash
-    ./ytranslate.sh https://youtu.be/VIDEO_ID /path/to/my_video.mp4
-    ```
-
-### Запуск в Google Colab
-
-1. Откройте файл [`ytranslate.ipynb`](https://colab.research.google.com/github/alex2844/youtube-translate/blob/main/ytranslate.ipynb)
+1. Откройте файл
+   [`ytranslate.ipynb`](https://colab.research.google.com/github/alex2844/youtube-translate/blob/main/ytranslate.ipynb)
    в Google Colab.
-2. Заполните параметры в блоке "Settings". Вы можете включить `FORCE_AVC`,
-   `MARK_WATCHED` и `ADD_INDEX` через чекбоксы.
-3. Запустите все ячейки.
-4. Скрипт обработает видео и автоматически сохранит их на Google Drive или
+2. Заполните параметры в блоке "Settings".
+3. **Чтобы просто скачать видео**, укажите одинаковые языки в `FROMLANG`
+   и `TOLANG`.
+4. Запустите все ячейки.
+5. Скрипт обработает видео и автоматически сохранит их на Google Drive или
    предложит скачать.
 
 ## Установка Зависимостей
