@@ -16,7 +16,6 @@ readonly VERSION='main'
 : "${YT_FORCE_IPV4:=false}"
 : "${YT_FORCE_AVC:=false}"
 : "${YT_MARK_WATCHED:=false}"
-: "${YT_ADD_INDEX:=false}"
 : "${YT_GENERATE_META:=false}"
 : "${YT_SPONSORBLOCK:=true}"
 
@@ -41,7 +40,6 @@ function usage() {
 	echo "  -o, --output=<path>    Output directory"
 	echo "  --force-avc            Force AVC (h264) video codec"
 	echo "  --mark-watched         Mark video as watched (requires cookies)"
-	echo "  --add-index            Add playlist index to filenames"
 	echo "  --meta                 Generate NFO and JPG for Media Centers"
 	echo "  --no-sponsorblock      Disable marking sponsor segments (enabled by default)"
 	echo "  --temp-dir=<path>      Temporary directory"
@@ -164,9 +162,6 @@ function translate_video() {
 		fi
 	fi
 	local title=$(basename "${filename}" | sed -E 's/\.+\.([^.]+)$/.\1/' | sed -E "s/(\.[a-zA-Z0-9]+)+$//")
-	if "${YT_ADD_INDEX}" && [[ -n "${playlist_index}" ]]; then
-		title=$(printf "%02d - %s" "${playlist_index}" "${title}")
-	fi
 	local final_file="${YT_OUTPUT_DIR}/${title}.${YT_OUTPUT_EXT}"
 	
 	if [[ -f "${final_file}" ]]; then
@@ -223,26 +218,53 @@ function translate_video() {
 				log "Fetching metadata (NFO/JPG)..."
 				local meta_data=$(yt-dlp "${YTDLP_OPTS[@]}" \
 					--no-simulate --skip-download --write-thumbnail --convert-thumbnails jpg --output "${cache}/meta" \
-					--print upload_date --print duration --print uploader --print title --print description \
+					--print id --print upload_date --print duration --print uploader --print title --print "categories" --print "tags" --print description \
 					"${url}")
 				if [[ -n "${meta_data}" ]]; then
 					mapfile -t d <<< "${meta_data}"
-					local date="${d[0]}"
-					local duration="${d[1]}"
-					local uploader=$(xml_escape "${d[2]}")
-					local title=$(xml_escape "${d[3]}")
-					local desc=$(xml_escape "$(printf "%s\n" "${d[@]:4}")")
+					local video_id="${d[0]}"
+					local date="${d[1]}"
+					local duration="${d[2]}"
+					local uploader=$(xml_escape "${d[3]}")
+					local title=$(xml_escape "${d[4]}")
+					local categories_raw="${d[5]}"
+					local tags_raw="${d[6]}"
+					local desc=$(xml_escape "$(printf "%s\n" "${d[@]:7}")")
+
 					local kodi_date=""
 					[[ "${date}" =~ ^[0-9]{8}$ ]] && kodi_date="${date:0:4}-${date:4:2}-${date:6:2}"
+
+					local genre_cleaned="${categories_raw//\'/}"
+					genre_cleaned="${genre_cleaned//[/}"
+					genre_cleaned="${genre_cleaned//]/}"
+					local genre=$(xml_escape "${genre_cleaned%%,*}")
+
+					local tags_xml=""
+					local tags="${tags_raw#[}"
+					tags="${tags%]}"
+					if [[ -n "${tags}" ]]; then
+						while IFS= read -r tag; do
+							local tag_cleaned=$(echo "${tag}" | xargs)
+							if [[ -n "${tag_cleaned}" ]]; then
+								tags_xml+="<tag>$(xml_escape "$tag_cleaned")</tag>"
+							fi
+						done <<< "${tags//,/$'\n'}"
+					fi
+
 					sed 's/^> //' <<-EOF | tee "${cache}/meta.nfo" > /dev/null
 						> <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 						> <musicvideo>
+						>     ${playlist_index:+"<track>${playlist_index}</track>"}
+						>     <uniqueid type="youtube" default="true">${video_id}</uniqueid>
 						>     <album>YouTube</album>
 						>     <title>${title%.}</title>
 						>     <artist>${uploader}</artist>
+						>     <studio>${uploader}</studio>
 						>     <plot>${desc}</plot>
 						>     <year>${date:0:4}</year>
 						>     <premiered>${kodi_date}</premiered>
+						>     <genre>${genre}</genre>
+						>     ${tags_xml}
 						>     <fileinfo>
 						>         <streamdetails>
 						>             <video>
@@ -312,7 +334,7 @@ function translate_video() {
 function main() {
 	if [[ $# -gt 0 ]]; then
 		local OPTIONS="hv4r:f:t:c:o:"
-		local LONGOPTS="help,version,ipv4,height:,from_lang:,to_lang:,cookies:,output:,temp-dir:,force-avc,mark-watched,add-index,no-cleanup,meta,no-sponsorblock"
+		local LONGOPTS="help,version,ipv4,height:,from_lang:,to_lang:,cookies:,output:,temp-dir:,force-avc,mark-watched,no-cleanup,meta,no-sponsorblock"
 		eval set -- $(getopt --options="${OPTIONS}" --longoptions="${LONGOPTS}" --name "$0" -- "$@")
 		while getopts "${OPTIONS}-:" OPT; do
 			if [[ "${OPT}" = "-" ]]; then
@@ -341,7 +363,6 @@ function main() {
 				temp-dir) YT_TEMP_DIR="${OPTARG}";;
 				force-avc) YT_FORCE_AVC=true;;
 				mark-watched) YT_MARK_WATCHED=true;;
-				add-index) YT_ADD_INDEX=true;;
 				meta) YT_GENERATE_META=true;;
 				no-cleanup) YT_NO_CLEANUP=true;;
 				no-sponsorblock) YT_SPONSORBLOCK=false;;
