@@ -134,7 +134,8 @@ function xml_escape() {
 function translate_video() {
 	local url="$1"
 	local local_file="${2:-}"
-	local playlist_index="${3:-}"
+	local playlist_index="${3:-1}"
+	local playlist_title="${4:-}"
 	local from_lang="${YT_FROMLANG}"
 	local to_lang="${YT_TOLANG}"
 	
@@ -254,12 +255,12 @@ function translate_video() {
 					sed 's/^> //' <<-EOF | tee "${cache}/meta.nfo" > /dev/null
 						> <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 						> <musicvideo>
-						>     ${playlist_index:+"<track>${playlist_index}</track>"}
 						>     <uniqueid type="youtube" default="true">${video_id}</uniqueid>
-						>     <album>YouTube</album>
+						>     <studio>YouTube</studio>
+						>     ${playlist_title:+"<album>$(xml_escape "${playlist_title}")</album>"}
+						>     ${playlist_index:+"<track>${playlist_index}</track>"}
 						>     <title>${title%.}</title>
 						>     <artist>${uploader}</artist>
-						>     <studio>${uploader}</studio>
 						>     <plot>${desc}</plot>
 						>     <year>${date:0:4}</year>
 						>     <premiered>${kodi_date}</premiered>
@@ -398,11 +399,18 @@ function main() {
 	if [[ -n "${YT_LOCAL_PATH}" ]]; then
 		[[ ! -f "${YT_LOCAL_PATH}" ]] && error "Local file not found: ${YT_LOCAL_PATH}"
 		log "Single file mode (Local Source)"
-		translate_video "${YT_URL}" "${YT_LOCAL_PATH}" "1"
+		translate_video "${YT_URL}" "${YT_LOCAL_PATH}"
 	else
 		log "Fetching video list..."
+		local playlist_title=""
 		local urls=()
 		if [[ "${YT_URL}" == *"youtube.com"* ]] || [[ "${YT_URL}" == *"youtu.be"* ]]; then
+			if "${YT_GENERATE_META}" && [[ "${YT_URL}" == *"list="* ]]; then
+				log "Playlist detected. Fetching title..."
+				playlist_title=$(yt-dlp "${YTDLP_OPTS[@]}" --print playlist_title -I 1 "${YT_URL}")
+				[[ "${playlist_title}" == "NA" ]] && playlist_title=""
+				[[ -n "$playlist_title" ]] && log "Playlist title found: ${playlist_title}"
+			fi
 			while IFS= read -r video_id; do
 				if [[ -n "${video_id}" ]] && [[ "${video_id}" != "NA" ]]; then
 					urls+=("https://youtu.be/${video_id}")
@@ -416,7 +424,7 @@ function main() {
 		[[ ${total} -eq 0 ]] && error "No videos found."
 		for video_url in "${urls[@]}"; do
 			log "=== [${count}/${total}] Processing ==="
-			translate_video "${video_url}" "" "${count}"
+			translate_video "${video_url}" "" "${count}" "${playlist_title}"
 			((count++))
 		done
 	fi
