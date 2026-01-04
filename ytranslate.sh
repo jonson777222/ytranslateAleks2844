@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly VERSION='main'
 : "${YT_COOKIES:=}"
-: "${YM_BROWSER:=}"
+: "${YT_BROWSER:=}"
 : "${YT_URL:=}"
 : "${YT_LOCAL_PATH:=}"
 : "${YT_FROMLANG:="en"}"
@@ -388,7 +388,7 @@ function main() {
 				f|from_lang) YT_FROMLANG="${OPTARG}";;
 				t|to_lang) YT_TOLANG="${OPTARG}";;
 				c|cookies) YT_COOKIES="${OPTARG}";;
-				b|browser) YM_BROWSER="${OPTARG}";;
+				b|browser) YT_BROWSER="${OPTARG}";;
 				o|output) YT_OUTPUT_DIR="${OPTARG}";;
 				temp-dir) YT_TEMP_DIR="${OPTARG}";;
 				force-avc) YT_FORCE_AVC=true;;
@@ -411,8 +411,8 @@ function main() {
 	fi
 
 	"${YT_FORCE_IPV4}" && YTDLP_OPTS+=(--force-ipv4)
-	[[ -n "${YM_COOKIES}" ]] && YTDLP_COOKIE_ARGS+=(--cookies "${YM_COOKIES}")
-	[[ -n "${YM_BROWSER}" ]] && YTDLP_COOKIE_ARGS+=(--cookies-from-browser "${YM_BROWSER}")
+	[[ -n "${YT_COOKIES}" ]] && YTDLP_COOKIE_ARGS+=(--cookies "${YT_COOKIES}")
+	[[ -n "${YT_BROWSER}" ]] && YTDLP_COOKIE_ARGS+=(--cookies-from-browser "${YT_BROWSER}")
 
 	check_dependencies
 	mkdir -p "${YT_OUTPUT_DIR}" "${YT_TEMP_DIR}"
