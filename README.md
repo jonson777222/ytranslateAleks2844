@@ -19,6 +19,9 @@ on Chromecast, Android TV, and Chrome OS.
 
 * **Bypass Throttling**: Use the Google Colab version to download videos
   from YouTube via Google's servers, avoiding ISP speed limits.
+* **Browser Cookie Integration**: Automatically use cookies from your browser
+  (e.g., Chrome, Firefox) for easy access to private playlists ("Watch Later",
+  "Liked Videos") without manually exporting files.
 * **Simple Downloader**: Just set the source and target languages to be the
   same (e.g., `en` to `en`) to use the script as a powerful video downloader.
 * **Automatic Translation**: Translate videos from YouTube and other sources.
@@ -56,9 +59,9 @@ on Chromecast, Android TV, and Chrome OS.
     * `-r, --height=<int>`: Set max video height (e.g., 1080).
     * `-f, --from_lang=<str>`: Source language (default: en).
     * `-t, --to_lang=<str>`: Target language (default: ru).
+    * `-c, --cookies=<path>`: Path to a Netscape cookies file.
+    * `-b, --browser=<name>`: Load cookies from a browser (e.g., chrome, firefox).
     * `-o, --output=<path>`: Output directory.
-    * `-c, --cookies=<path>`: Path to cookies file (for private playlists or
-      marking watched).
     * `-4, --ipv4`: Force IPv4 connection.
     * `--force-avc`: Force AVC (H.264) video codec for older devices.
     * `--mark-watched`: Mark video as watched on YouTube (requires cookies).
@@ -123,6 +126,9 @@ INSTALL_DEPENDENCIES=true ./ytranslate.sh [OPTIONS] <URL>
 * **Обход замедления YouTube**: Используйте версию для Google Colab, чтобы
   скачивать видео через серверы Google на максимальной скорости, игнорируя
   ограничения вашего провайдера.
+* **Интеграция с cookies браузера**: Автоматически используйте cookies из
+  вашего браузера (Chrome, Firefox и др.) для простого доступа к приватным
+  плейлистам («Смотреть позже», «Понравившиеся») без ручного экспорта файлов.
 * **Простой загрузчик видео**: Просто укажите одинаковые языки
   (например, с `ru` на `ru`), чтобы использовать скрипт как мощный инструмент
   для скачивания видео или плейлистов.
@@ -160,9 +166,9 @@ INSTALL_DEPENDENCIES=true ./ytranslate.sh [OPTIONS] <URL>
     * `-r, --height=<int>`: Макс. высота видео (напр. 1080).
     * `-f, --from_lang=<str>`: Язык оригинала (по умолчанию: en).
     * `-t, --to_lang=<str>`: Язык перевода (по умолчанию: ru).
+    * `-c, --cookies=<path>`: Путь к файлу cookies в формате Netscape.
+    * `-b, --browser=<имя>`: Загрузить cookies из браузера (напр. chrome, firefox).
     * `-o, --output=<path>`: Папка для сохранения.
-    * `-c, --cookies=<path>`: Путь к cookies (для приватных плейлистов или
-      пометки "Просмотрено").
     * `-4, --ipv4`: Принудительно использовать IPv4.
     * `--force-avc`: Принудительно использовать кодек AVC (H.264) для
       старых устройств.

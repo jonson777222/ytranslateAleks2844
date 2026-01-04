@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly VERSION='main'
 : "${YT_COOKIES:=}"
+: "${YM_BROWSER:=}"
 : "${YT_URL:=}"
 : "${YT_LOCAL_PATH:=}"
 : "${YT_FROMLANG:="en"}"
@@ -19,13 +20,15 @@ readonly VERSION='main'
 : "${YT_GENERATE_META:=false}"
 : "${YT_SPONSORBLOCK:=true}"
 
-CURRENT_CACHE=""
-YTDLP_OPTS=(--no-warnings --fragment-retries 10)
 if [[ -n "${COLAB_RELEASE_TAG:-}" ]]; then
 	INSTALL_DEPENDENCIES="true"
 else
 	INSTALL_DEPENDENCIES="${INSTALL_DEPENDENCIES:-false}"
 fi
+
+CURRENT_CACHE=""
+YTDLP_OPTS=(--no-warnings --fragment-retries 10)
+YTDLP_COOKIE_ARGS=()
 
 function usage() {
 	echo "Usage: "$0" [OPTION...] <URL> [LOCAL_FILE]"
@@ -36,7 +39,8 @@ function usage() {
 	echo "  -r, --height=<int>     Max video height (e.g. 1080). Default: 0 (Best)"
 	echo "  -f, --from_lang=<str>  Source language (default: en)"
 	echo "  -t, --to_lang=<str>    Target language (default: ru)"
-	echo "  -c, --cookies=<path>   Cookies path"
+	echo "  -c, --cookies=<path>   Cookies file path"
+	echo "  -b, --browser=<name>   Load cookies from browser"
 	echo "  -o, --output=<path>    Output directory"
 	echo "  --force-avc            Force AVC (h264) video codec"
 	echo "  --mark-watched         Mark video as watched (requires cookies)"
@@ -52,6 +56,12 @@ function usage() {
 	echo "  "$0" https://youtu.be/VIDEO_ID"
 	echo "  "$0" https://youtu.be/VIDEO_ID my_video.mp4"
 	echo "  "$0" -c cookies.txt https://www.youtube.com/playlist?list=WL"
+	exit 0
+}
+
+function print_version() {
+	echo "${VERSION}"
+	exit 0
 }
 
 function cleanup() {
@@ -118,9 +128,25 @@ function check_dependencies() {
 	install_dependency "vot-cli" "npm" "https://github.com/alex2844/vot-cli/tarball/yandexdisk"
 }
 
+function call_ytdlp() {
+	local raw_args="$*"
+	local force_cookies=false
+
+	# WL = Watch Later, LL = Liked Videos, LM = Liked Music
+	if [[ "${raw_args}" =~ list=(L[LM]|WL) ]] || [[ "${raw_args}" == *"--mark-watched"* ]]; then
+		force_cookies=true
+	fi
+	if ! "${force_cookies}" && yt-dlp "${YTDLP_OPTS[@]}" "$@" 2>/dev/null; then
+		return 0
+	fi
+	local cmd_args=("${YTDLP_OPTS[@]}")
+	[[ ${#YTDLP_COOKIE_ARGS[@]} -gt 0 ]] && cmd_args+=("${YTDLP_COOKIE_ARGS[@]}")
+	yt-dlp "${cmd_args[@]}" "$@"
+}
+
 function get_clean_filename() {
 	local url="$1"
-	yt-dlp "${YTDLP_OPTS[@]}" --restrict-filenames --print filename -o "%(title)s.%(ext)s" "${url}"
+	call_ytdlp --restrict-filenames --print filename -o "%(title)s.%(ext)s" "${url}"
 }
 
 function xml_escape() {
@@ -195,9 +221,9 @@ function translate_video() {
 		log "Downloading streams..."
 		video_input=$(find "${cache}" -name "video.*" -type f | head -n 1)
 		if [[ -z "${video_input}" ]]; then
-			local video_dlp_opts=("${YTDLP_OPTS[@]}")
+			local video_dlp_opts=()
 			"${YT_SPONSORBLOCK}" && video_dlp_opts+=(--sponsorblock-mark all)
-			if ! yt-dlp "${video_dlp_opts[@]}" --progress -f "${video_format}" -o "${cache}/video.%(ext)s" "${url}"; then
+			if ! call_ytdlp "${video_dlp_opts[@]}" --progress -f "${video_format}" -o "${cache}/video.%(ext)s" "${url}"; then
 				error "Video download failed."
 			fi
 			video_input=$(find "${cache}" -name "video.*" -type f | head -n 1)
@@ -208,7 +234,7 @@ function translate_video() {
 			if ffprobe -v error -select_streams a -show_entries stream=codec_type "${video_input}" 2>/dev/null | grep -q "audio"; then
 				audio_input="${video_input}"
 			else
-				if ! yt-dlp "${YTDLP_OPTS[@]}" --progress -f "${audio_format}" -o "${cache}/audio.%(ext)s" "${url}"; then
+				if ! call_ytdlp --progress -f "${audio_format}" -o "${cache}/audio.%(ext)s" "${url}"; then
 					error "Audio download failed."
 				fi
 				audio_input=$(find "${cache}" -name "audio.*" -type f | head -n 1)
@@ -217,7 +243,7 @@ function translate_video() {
 		if "${YT_GENERATE_META}"; then
 			if [[ ! -f "${cache}/meta.jpg" ]] || [[ ! -f "${cache}/meta.nfo" ]]; then
 				log "Fetching metadata (NFO/JPG)..."
-				local meta_data=$(yt-dlp "${YTDLP_OPTS[@]}" \
+				local meta_data=$(call_ytdlp \
 					--no-simulate --skip-download --write-thumbnail --convert-thumbnails jpg --output "${cache}/meta" \
 					--print id --print upload_date --print duration --print uploader --print title --print "categories" --print "tags" --print description \
 					"${url}")
@@ -329,7 +355,7 @@ function translate_video() {
 		fi
 		if "${YT_MARK_WATCHED}" && [[ -n "${YT_COOKIES}" ]]; then
 			log "Marking video as watched on YouTube..."
-			yt-dlp "${YTDLP_OPTS[@]}" --mark-watched --skip-download "${url}" >/dev/null 2>&1 || log "⚠️ Could not mark video as watched."
+			call_ytdlp --mark-watched --skip-download "${url}" >/dev/null 2>&1 || log "⚠️ Could not mark video as watched."
 		fi
 		if ! "${YT_NO_CLEANUP}"; then
 			rm -rf "${cache}"
@@ -342,8 +368,8 @@ function translate_video() {
 
 function main() {
 	if [[ $# -gt 0 ]]; then
-		local OPTIONS="hv4r:f:t:c:o:"
-		local LONGOPTS="help,version,ipv4,height:,from_lang:,to_lang:,cookies:,output:,temp-dir:,force-avc,mark-watched,no-cleanup,meta,no-sponsorblock"
+		local OPTIONS="hv4r:f:t:c:b:o:"
+		local LONGOPTS="help,version,ipv4,height:,from_lang:,to_lang:,cookies:,browser:,output:,temp-dir:,force-avc,mark-watched,no-cleanup,meta,no-sponsorblock"
 		eval set -- $(getopt --options="${OPTIONS}" --longoptions="${LONGOPTS}" --name "$0" -- "$@")
 		while getopts "${OPTIONS}-:" OPT; do
 			if [[ "${OPT}" = "-" ]]; then
@@ -355,19 +381,14 @@ function main() {
 				fi
 			fi
 			case "${OPT}" in
-				h|help)
-					usage;
-					exit 0
-				;;
-				v|version)
-					echo "${VERSION}";
-					exit 0
-				;;
+				h|help) usage;;
+				v|version) print_version;;
 				4|ipv4) YT_FORCE_IPV4=true;;
 				r|height) YT_HEIGHT="${OPTARG}";;
 				f|from_lang) YT_FROMLANG="${OPTARG}";;
 				t|to_lang) YT_TOLANG="${OPTARG}";;
 				c|cookies) YT_COOKIES="${OPTARG}";;
+				b|browser) YM_BROWSER="${OPTARG}";;
 				o|output) YT_OUTPUT_DIR="${OPTARG}";;
 				temp-dir) YT_TEMP_DIR="${OPTARG}";;
 				force-avc) YT_FORCE_AVC=true;;
@@ -390,7 +411,8 @@ function main() {
 	fi
 
 	"${YT_FORCE_IPV4}" && YTDLP_OPTS+=(--force-ipv4)
-	[[ -n "${YT_COOKIES}" ]] && YTDLP_OPTS+=(--cookies "${YT_COOKIES}")
+	[[ -n "${YM_COOKIES}" ]] && YTDLP_COOKIE_ARGS+=(--cookies "${YM_COOKIES}")
+	[[ -n "${YM_BROWSER}" ]] && YTDLP_COOKIE_ARGS+=(--cookies-from-browser "${YM_BROWSER}")
 
 	check_dependencies
 	mkdir -p "${YT_OUTPUT_DIR}" "${YT_TEMP_DIR}"
@@ -415,7 +437,7 @@ function main() {
 		if [[ "${YT_URL}" == *"youtube.com"* ]] || [[ "${YT_URL}" == *"youtu.be"* ]]; then
 			if "${YT_GENERATE_META}" && [[ "${YT_URL}" == *"list="* ]]; then
 				log "Playlist detected. Fetching title..."
-				playlist_title=$(yt-dlp "${YTDLP_OPTS[@]}" --print playlist_title -I 1 "${YT_URL}")
+				playlist_title=$(call_ytdlp --print playlist_title -I 1 "${YT_URL}")
 				[[ "${playlist_title}" == "NA" ]] && playlist_title=""
 				[[ -n "$playlist_title" ]] && log "Playlist title found: ${playlist_title}"
 			fi
@@ -423,7 +445,7 @@ function main() {
 				if [[ -n "${video_id}" ]] && [[ "${video_id}" != "NA" ]]; then
 					urls+=("https://youtu.be/${video_id}")
 				fi
-			done < <(yt-dlp "${YTDLP_OPTS[@]}" --flat-playlist --print id --ignore-errors "${YT_URL}")
+			done < <(call_ytdlp --flat-playlist --print id --ignore-errors "${YT_URL}")
 		else
 			urls+=("${YT_URL}")
 		fi
