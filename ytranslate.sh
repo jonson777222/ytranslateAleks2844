@@ -11,7 +11,7 @@ readonly VERSION='main'
 : "${YT_HEIGHT:=0}"
 : "${YT_ORIG_VOLUME:=0.15}"
 : "${YT_TEMP_DIR:=".ytranslate"}"
-: "${YT_OUTPUT_EXT:="mkv"}"
+: "${YT_OUTPUT_EXT:="mp4"}"
 : "${YT_OUTPUT_DIR:="."}"
 : "${YT_NO_CLEANUP:=false}"
 : "${YT_FORCE_IPV4:=false}"
@@ -125,7 +125,7 @@ function check_dependencies() {
 	install_dependency "ffmpeg"
 	install_dependency "python3"
 	install_dependency "yt-dlp" "pip"
-	install_dependency "vot-cli" "npm" "https://github.com/alex2844/vot-cli/tarball/yandexdisk"
+	install_dependency "vot-cli" "npm" "https://github.com/jonson777222/vot-cli/tarball/yandexdisk"
 }
 
 function call_ytdlp() {
